@@ -88,25 +88,38 @@ def getpoly(m,Hmin,Hmax,Wmin,Wmax,f):
             h = Hmin +  deltah*j
             vertex[i+1,j+1] =  (w,h,f(w,h))
     return vertex, J1tri
-def DCC(model,u,w,h,g,m,Wmin,Wmax,Hmin,Hmax,getg):
-    # DCC
-    # 定义变量，DCC方法对每个三角形有一个二进制变量标识
-    # 三角形的个数：2*(m-1)**2
-    # 顶点的个数：3*2*(m-1)**2 （不考虑共用顶点，顶点个数即是三角形个数的三倍）
-    delta = model.addVars(2*(m-1)**2, vtype=gp.GRB.BINARY, name="piecewise")
-    weight = model.addVars(3*2*(m-1)**2, vtype=gp.GRB.CONTINUOUS,lb=0,name="weight")
+def MC(model,u,w,h,g,m,Wmin,Wmax,Hmin,Hmax,getg):
+    # MC
+    # 定义变量，DLOG方法对每个三角形有一个二进制变量标识
+    # 生成三角形的数量
+    num = int(2*(m-1)**2)
+
+    delta = model.addVars(range(1,num+1), vtype=gp.GRB.BINARY, name="piecewise")
+    weight = model.addVars(range(1,m+1),range(1,m+1), vtype=gp.GRB.CONTINUOUS,lb=0,name="weight")
+    epsilon = model.addVars(range(1,m+1), vtype=gp.GRB.CONTINUOUS,lb=0, name="SOS2-x")
+    gamma = model.addVars(range(1,m+1), vtype=gp.GRB.CONTINUOUS,lb=0, name="SOS2-y")
+    delta = model.addVar(vtype=gp.GRB.BINARY, name="bin")
     # 1.J1 triangulation 给出每个顶点的坐标，以及剖分后三角形的坐标
     vertex, J1tri = getpoly(m,Hmin,Hmax,Wmin,Wmax,getg)
-    # 2.添加约束，凸组合
-    model.addConstr(h<=gp.quicksum(weight[3*p+v]*vertex[J1tri[p][v]][1] for v in range(3) for p in range(len(J1tri)))+Hmax*(1-u))
-    model.addConstr(h>=gp.quicksum(weight[3*p+v]*vertex[J1tri[p][v]][1] for v in range(3) for p in range(len(J1tri))))
-    model.addConstr(w==gp.quicksum(weight[3*p+v]*vertex[J1tri[p][v]][0] for v in range(3) for p in range(len(J1tri))))
-    model.addConstr(g==gp.quicksum(weight[3*p+v]*vertex[J1tri[p][v]][2] for v in range(3) for p in range(len(J1tri))))
-    model.addConstrs(delta[p]==gp.quicksum(weight[3*p+v] for v in range(3)) for p in range(len(J1tri)))
-    model.addConstr(u==gp.quicksum(delta[p] for p in range(len(J1tri))))
+    # print(vertex[1,1])
+    # 2.添加约束，凸组合  
+    model.addConstr(h<=gp.quicksum(weight[i,j]*vertex[i,j][1] for i in range(1,m+1) for j in range(1,m+1))+Hmax*(1-u))
+    model.addConstr(h>=gp.quicksum(weight[i,j]*vertex[i,j][1] for i in range(1,m+1) for j in range(1,m+1)))
+    model.addConstr(w==gp.quicksum(weight[i,j]*vertex[i,j][0] for i in range(1,m+1) for j in range(1,m+1)))
+    model.addConstr(g==gp.quicksum(weight[i,j]*vertex[i,j][2] for i in range(1,m+1) for j in range(1,m+1)))
+
+    model.addConstrs(epsilon[i] == gp.quicksum(weight[i,j] for j in range(1,1+m)) for i in range(1,m+1))
+    model.addConstrs(gamma[i] == gp.quicksum(weight[j,i] for j in range(1,1+m)) for i in range(1,m+1))
+    
+    model.addSOS(gp.GRB.SOS_TYPE2,[epsilon[i] for i in range(1,m+1)])
+    model.addSOS(gp.GRB.SOS_TYPE2,[gamma[i] for i in range(1,m+1)])
+
+    # 三角形的识别
+    model.addConstr(gp.quicksum(weight[i,j] for i in range(2,logP+1,2) for j in range(1,logP+1,2))<=delta)
+    model.addConstr(gp.quicksum(weight[j,i] for i in range(2,logP+1,2) for j in range(1,logP+1,2))<=1-delta)
 
 m = gp.Model()
-# add variables 
+# add variables
 v = m.addVars(TI, lb=Vmin, ub=Vmax, vtype=gp.GRB.CONTINUOUS, name="Volume")
 q = m.addVars(T, vtype=gp.GRB.CONTINUOUS, name="PlantDischarge")
 s = m.addVars(T, vtype=gp.GRB.CONTINUOUS, name="Spill")
@@ -117,7 +130,7 @@ h = m.addVars(T, vtype=gp.GRB.CONTINUOUS, name="GrossHead")
 u = m.addVars(N, T, vtype=gp.GRB.BINARY, name="UnitState")
 i = m.addVars(N, T, vtype=gp.GRB.BINARY, name="UnitStartup")
 o = m.addVars(N, T, vtype=gp.GRB.BINARY, name="UnitShutdown")
-piece = 5 # 
+piece = 3 # 
 
 m.update()
 
@@ -136,7 +149,7 @@ for n in N:
         m.addConstrs(u[n, t]*Gmin[0]<=g[n, t] for t in T)
         m.addConstrs(u[n, t]*Gmax[0]>=g[n, t] for t in T)
         for t in T:
-            DCC(m,u[n, t],w[n, t],h[t],g[n, t],piece,Wmin[0],Wmax[0],Hmin,Hmax,getg1)
+            SOS2(m,u[n, t],w[n, t],h[t],g[n, t],piece,Wmin[0],Wmax[0],Hmin,Hmax,getg1)
         
     elif n in [5, 6]:
         m.addConstrs(u[n, t]*Wmin[1]<=w[n, t] for t in T)
@@ -144,7 +157,7 @@ for n in N:
         m.addConstrs(u[n, t]*Gmin[1]<=g[n, t] for t in T)
         m.addConstrs(u[n, t]*Gmax[1]>=g[n, t] for t in T)
         for t in T:
-            DCC(m,u[n, t],w[n, t],h[t],g[n, t],piece,Wmin[1],Wmax[1],Hmin,Hmax,getg2)
+            SOS2(m,u[n, t],w[n, t],h[t],g[n, t],piece,Wmin[1],Wmax[1],Hmin,Hmax,getg2)
 ## 毛水头计算
 m.addConstrs(h[t] == ((E[0] + E[1]*v[t])+(E[0] + E[1]*v[t+1]))/2-(F[0]+F[1]*(q[t]+s[t])) for t in T)
 ## 电站发电流量
@@ -169,3 +182,19 @@ m.Params.MIPGap = 0.01 # 百分比界差
 m.Params.TimeLimit = 100 # 限制求解时间为 100s
 
 m.optimize()
+
+
+# 绘图
+import matplotlib.pyplot as plt
+# plt.set_cmap("gray")
+output = np.array([[g[i,j].x for j in T] for i in N])
+print(m.Objval)
+for n in N:
+    if n == 1:
+        plt.bar(T,output[n-1,:],width=0.5)
+    else:
+        plt.bar(T,output[n-1,:],bottom=sum(output[:n-1,:]),width=0.5)
+plt.xlabel('Period(h)')
+plt.ylabel('Power(MW)')
+plt.plot(T,load,color='k',lw=1)
+plt.show()
