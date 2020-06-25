@@ -1,5 +1,6 @@
 import numpy as np
 import gurobipy as gp
+from Bipiecewise.Bipiecewise import DCC 
 # sets
 T = range(1,25)
 TI = range(1,26)
@@ -49,61 +50,61 @@ def getg2(w, h, A=Acoefficient[1], D=Dcoefficient[1]):
     g = 9.81*1e-3*eta*(h-D*w**2)*w
     return g
 
-def getpoly(m,Hmin,Hmax,Wmin,Wmax,f):
-    if m>=3 and m%2==1:
-        pass
-    else:
-        print("m必须为大于2的奇数，例如：3,5,7,9,…")
-        return 0
-    num = ((m-1)/2)**2
-    Hlist = np.linspace(Hmin,Hmax,m)
-    Wlist = np.linspace(Wmin,Wmax,m)
-    deltah = (Hmax-Hmin)/(m-1)
-    deltaw = (Wmax-Wmin)/(m-1)
-    J1tri = list()
-    for d, w in zip(range(1,m+1),Wlist):
-        for t, h in zip(range(1,m+1),Hlist):
-            if d%2==0 and t%2==0:
-                midpoint = (d,t)
-                # 下左
-                J1tri.append([(d,t),(d,t-1),(d-1,t-1)])
-                # 下右
-                J1tri.append([(d,t),(d,t-1),(d+1,t-1)])
-                # 左下
-                J1tri.append([(d,t),(d-1,t),(d-1,t-1)])
-                # 左上
-                J1tri.append([(d,t),(d-1,t),(d-1,t+1)])
-                # 上左
-                J1tri.append([(d,t),(d,t+1),(d-1,t+1)])
-                # 上右
-                J1tri.append([(d,t),(d,t+1),(d+1,t+1)])
-                # 右上
-                J1tri.append([(d,t),(d+1,t),(d+1,t+1)])
-                # 右下
-                J1tri.append([(d,t),(d+1,t),(d+1,t-1)])
-    vertex = {}
-    for i in range(m):
-        for j in range(m):
-            w = Wmin + deltaw*i
-            h = Hmin +  deltah*j
-            vertex[i+1,j+1] =  (w,h,f(w,h))
-    return vertex, J1tri
-def DCC(model,u,w,h,g,m,Wmin,Wmax,Hmin,Hmax,getg):
-    # DCC
-    # 定义变量，DCC方法对每个三角形有一个二进制变量标识
-    # 三角形的个数：2*(m-1)**2
-    # 顶点的个数：3*2*(m-1)**2 （不考虑共用顶点，顶点个数即是三角形个数的三倍）
-    delta = model.addVars(2*(m-1)**2, vtype=gp.GRB.BINARY, name="piecewise")
-    weight = model.addVars(3*2*(m-1)**2, vtype=gp.GRB.CONTINUOUS,lb=0,name="weight")
-    # 1.J1 triangulation 给出每个顶点的坐标，以及剖分后三角形的坐标
-    vertex, J1tri = getpoly(m,Hmin,Hmax,Wmin,Wmax,getg)
-    # 2.添加约束，凸组合
-    model.addConstr(h<=gp.quicksum(weight[3*p+v]*vertex[J1tri[p][v]][1] for v in range(3) for p in range(len(J1tri)))+Hmax*(1-u))
-    model.addConstr(h>=gp.quicksum(weight[3*p+v]*vertex[J1tri[p][v]][1] for v in range(3) for p in range(len(J1tri))))
-    model.addConstr(w==gp.quicksum(weight[3*p+v]*vertex[J1tri[p][v]][0] for v in range(3) for p in range(len(J1tri))))
-    model.addConstr(g==gp.quicksum(weight[3*p+v]*vertex[J1tri[p][v]][2] for v in range(3) for p in range(len(J1tri))))
-    model.addConstrs(delta[p]==gp.quicksum(weight[3*p+v] for v in range(3)) for p in range(len(J1tri)))
-    model.addConstr(u==gp.quicksum(delta[p] for p in range(len(J1tri))))
+# def getpoly(m,Hmin,Hmax,Wmin,Wmax,f):
+#     if m>=3 and m%2==1:
+#         pass
+#     else:
+#         print("m必须为大于2的奇数，例如：3,5,7,9,…")
+#         return 0
+#     num = ((m-1)/2)**2
+#     Hlist = np.linspace(Hmin,Hmax,m)
+#     Wlist = np.linspace(Wmin,Wmax,m)
+#     deltah = (Hmax-Hmin)/(m-1)
+#     deltaw = (Wmax-Wmin)/(m-1)
+#     J1tri = list()
+#     for d, w in zip(range(1,m+1),Wlist):
+#         for t, h in zip(range(1,m+1),Hlist):
+#             if d%2==0 and t%2==0:
+#                 midpoint = (d,t)
+#                 # 下左
+#                 J1tri.append([(d,t),(d,t-1),(d-1,t-1)])
+#                 # 下右
+#                 J1tri.append([(d,t),(d,t-1),(d+1,t-1)])
+#                 # 左下
+#                 J1tri.append([(d,t),(d-1,t),(d-1,t-1)])
+#                 # 左上
+#                 J1tri.append([(d,t),(d-1,t),(d-1,t+1)])
+#                 # 上左
+#                 J1tri.append([(d,t),(d,t+1),(d-1,t+1)])
+#                 # 上右
+#                 J1tri.append([(d,t),(d,t+1),(d+1,t+1)])
+#                 # 右上
+#                 J1tri.append([(d,t),(d+1,t),(d+1,t+1)])
+#                 # 右下
+#                 J1tri.append([(d,t),(d+1,t),(d+1,t-1)])
+#     vertex = {}
+#     for i in range(m):
+#         for j in range(m):
+#             w = Wmin + deltaw*i
+#             h = Hmin +  deltah*j
+#             vertex[i+1,j+1] =  (w,h,f(w,h))
+#     return vertex, J1tri
+# def DCC(model,u,w,h,g,m,Wmin,Wmax,Hmin,Hmax,getg):
+#     # DCC
+#     # 定义变量，DCC方法对每个三角形有一个二进制变量标识
+#     # 三角形的个数：2*(m-1)**2
+#     # 顶点的个数：3*2*(m-1)**2 （不考虑共用顶点，顶点个数即是三角形个数的三倍）
+#     delta = model.addVars(2*(m-1)**2, vtype=gp.GRB.BINARY, name="piecewise")
+#     weight = model.addVars(3*2*(m-1)**2, vtype=gp.GRB.CONTINUOUS,lb=0,name="weight")
+#     # 1.J1 triangulation 给出每个顶点的坐标，以及剖分后三角形的坐标
+#     vertex, J1tri = getpoly(m,Hmin,Hmax,Wmin,Wmax,getg)
+#     # 2.添加约束，凸组合
+#     model.addConstr(h<=gp.quicksum(weight[3*p+v]*vertex[J1tri[p][v]][1] for v in range(3) for p in range(len(J1tri)))+Hmax*(1-u))
+#     model.addConstr(h>=gp.quicksum(weight[3*p+v]*vertex[J1tri[p][v]][1] for v in range(3) for p in range(len(J1tri))))
+#     model.addConstr(w==gp.quicksum(weight[3*p+v]*vertex[J1tri[p][v]][0] for v in range(3) for p in range(len(J1tri))))
+#     model.addConstr(g==gp.quicksum(weight[3*p+v]*vertex[J1tri[p][v]][2] for v in range(3) for p in range(len(J1tri))))
+#     model.addConstrs(delta[p]==gp.quicksum(weight[3*p+v] for v in range(3)) for p in range(len(J1tri)))
+#     model.addConstr(u==gp.quicksum(delta[p] for p in range(len(J1tri))))
 
 m = gp.Model()
 # add variables 
