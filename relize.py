@@ -147,15 +147,16 @@ m.addConstrs(u[n, t] - u[n, t-1]>=i[n, t]-o[n, t] for n in N for t in T if t > 1
 ## 最大开停机次数约束
 m.addConstrs(gp.quicksum(i[n, t] for t in T)<=Imax for n in N)
 ## 最小启停持续时段约束
-for t in T:
-    if t-Ton<1:
-        m.addConstr(gp.quicksum(i[n, tt] for tt in range(1,t+1))<=u[n, t])
-    else:
-        m.addConstr(gp.quicksum(i[n, tt] for tt in range(t-Ton,t+1))<=u[n, t])
-    if t-Toff<1:
-        m.addConstr(gp.quicksum(i[n, tt] for tt in range(1,t+1))<=1-u[n, t])
-    else:
-        m.addConstr(gp.quicksum(i[n, tt] for tt in range(t-Toff,t+1))<=1-u[n, t])
+for n in N:
+    for t in T:
+        if t-Ton<1:
+            m.addConstr(gp.quicksum(i[n, tt] for tt in range(1,t+1))<=u[n, t])
+        else:
+            m.addConstr(gp.quicksum(i[n, tt] for tt in range(t-Ton,t+1))<=u[n, t])
+        if t-Toff<1:
+            m.addConstr(gp.quicksum(i[n, tt] for tt in range(1,t+1))<=1-u[n, t])
+        else:
+            m.addConstr(gp.quicksum(i[n, tt] for tt in range(t-Toff,t+1))<=1-u[n, t])
 # model solve
 m.Params.LogToConsole = True # 显示求解过程
 m.Params.MIPGap = 0.01 # 百分比界差
